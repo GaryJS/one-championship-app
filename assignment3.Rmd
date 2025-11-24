@@ -1,0 +1,472 @@
+---
+title: "Muay Thai Athletes in ONE Championship"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(ggimage)
+library(shinyWidgets)
+library(plotly)
+library(shiny)
+fighter_df <- read_csv("all_fighter_data_final.csv")
+
+```
+
+
+```{r}
+fighter_record <- fighter_df %>%
+  group_by(Name) %>%
+  summarise(
+    Total_Fights = n(),
+    Wins = sum(Fight_Result == "WIN", na.rm = TRUE),
+    Losses = sum(Fight_Result == "LOSS", na.rm = TRUE),
+    Knockouts_TKOs = sum(grepl("Knockout|TKO", Fight_Method, ignore.case = TRUE)),
+    Decisions = sum(grepl("Decision", Fight_Method, ignore.case = TRUE))
+  )
+
+
+
+
+```
+
+```{r}
+general_info <- fighter_df %>%
+  group_by(Name) %>%
+  summarise(
+    Country = first(Country),  
+    Weight = first(Weight),    
+    Height = first(Height),    
+    Age = first(Age),          
+    Team = first(Team)         
+  )
+
+
+```
+
+```{r}
+fighter_summary <- general_info %>%
+  left_join(fighter_record, by = "Name")
+
+all_countries <- unique(fighter_summary$Country)
+
+
+fighter_summary <- fighter_summary %>%
+ mutate(Weight_Class = case_when(
+   Weight >= 105 & Weight <= 115 ~ "AtomWeight",
+   Weight > 115 & Weight <= 125 ~ "Strawweight",
+   Weight > 125 & Weight <=135 ~ "FlyWeight",
+   Weight > 135 & Weight <= 145 ~ "Bantamweight",
+   Weight > 145 & Weight <= 155 ~ "FeatherWeight",
+   Weight > 155 & Weight <= 170 ~ "Lightweight",
+   Weight > 170 & Weight <= 185 ~ "Welterweight",
+   Weight > 185 & Weight <= 205 ~ "Middleweight",
+   Weight > 205 & Weight <= 225 ~ "Light Heavyweight",
+   Weight > 225 & Weight <= 265 ~ "Heavyweight",
+   TRUE ~ "Other"
+ ))
+
+all_weight_class <- unique(fighter_summary$Weight_Class)
+```
+
+```{r}
+write.csv(fighter_summary, "fighter_summary_final.csv", row.names = FALSE)
+
+```
+
+
+## SideBar {.sidebar}
+```{r}
+
+HTML("<p><strong>Dashboard Overview:</strong><br>
+     This dashboard explores the top fighters by total wins, country, and weight class, as well as the gyms that represent the most fighters in ONE Championship. Fighters can be filtered by weight class and country, showcasing the top athletes for each. The charts dynamically update based on these selections.</p>")
+
+
+
+pickerInput(
+    inputId  = "picker_country", 
+    label    = h4("Select Country"), 
+    choices  = all_countries,
+    selected = all_countries,
+    multiple = FALSE, 
+    options  = list(
+        `actions-box` = TRUE, 
+        size = 10, 
+        `selected-text-format` = "count > 3"
+    )
+)
+
+pickerInput(
+    inputId  = "picker_weightclass", 
+    label    = h4("Select Weight class"), 
+    choices  = all_weight_class,
+    selected = all_weight_class,
+    multiple = FALSE, 
+    options  = list(
+        `actions-box` = TRUE, 
+        size = 10, 
+        `selected-text-format` = "count > 3"
+    )
+)
+
+```
+
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Top Fighters by Country
+
+```{r}
+filtered_fighters_by_country <- reactive({
+  fighter_summary %>%
+    filter(Country %in% input$picker_country) %>%
+    arrange(desc(Wins)) 
+})
+
+renderPlotly(expr = {
+  top_fighters_country_plot <- filtered_fighters_by_country() %>%
+    head(10) %>%
+    ggplot(aes(x = reorder(Name, -Wins), y = Wins, fill = Country)) +
+    geom_bar(stat = "identity") +
+    labs(title = "Top 10 Fighters by Wins (Filtered by Country)",
+         x = "Fighter",
+         y = "Wins") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+})
+
+```
+
+
+### Top Fighters by Weight Class
+
+```{r}
+filtered_fighters_by_weightclass <- reactive({
+  fighter_summary %>%
+    filter(Weight_Class %in% input$picker_weightclass) %>%
+    arrange(desc(Wins))
+})
+
+renderPlotly(expr = {
+  top_fighters_weightclass_plot <- filtered_fighters_by_weightclass() %>%
+    head(10) %>%
+    ggplot(aes(x = reorder(Name, -Wins), y = Wins, fill = Weight_Class)) +
+    geom_bar(stat = "identity") +
+    labs(title = "Top 10 Fighters by Wins (Filtered by Weight Class)",
+         x = "Fighter",
+         y = "Wins") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+})
+  
+```
+
+Column {data-width=550}
+-----------------------------------------------------------------------
+
+### Top Muay Thai Fighters
+
+```{r}
+top_fighters <- fighter_summary %>%
+  # Group by fighter's name (assuming Total_Fights and Wins are already summarized)
+  group_by(Name) %>%
+  # Arrange by Wins first, then Total_Fights if needed
+  arrange(desc(Wins), desc(Total_Fights)) 
+  # Get the top 10 fighters
+  
+top_fighters <- head(top_fighters, n = 10)
+
+top_fighters <- top_fighters %>%
+  ungroup() %>%  
+  mutate(Image = c(
+    "https://cdn.onefc.com/wp-content/uploads/2023/10/Rodtang_Jitmuangnon-Avatar-500x345-1.png",
+    "https://cdn.onefc.com/wp-content/uploads/2019/01/Superlek_Kiatmoo9-avatar-500x345-1.png",
+    "https://cdn.onefc.com/wp-content/uploads/2017/02/Aung_La_N_Sang-avatar-500x345-2.png",
+    "https://cdn.onefc.com/wp-content/uploads/2018/09/Stamp_Fairtex-avatar-500x345-5.png",
+    "https://cdn.onefc.com/wp-content/uploads/2017/02/Amir_Khan-avatar-500x345-2.png",
+    "https://cdn.onefc.com/wp-content/uploads/2018/03/Nong-O_Gaiyanghadao-avatar-500x345-2.png",
+    "https://img.jakpost.net/c/2022/10/25/2022_10_25_131364_1666681771._large.jpg",
+    "https://cdn.onefc.com/wp-content/uploads/2016/11/Adriano_Moraes-avatar-500x345-3.png",
+    "https://cdn.onefc.com/wp-content/uploads/2018/06/Saemapetch_Fairtex-avatar-500x345-2.png",
+    "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRLZiGGxLw_TYUhSlE0Jp-QJ-eQgka_p3YDMA&s"
+  ))
+
+ggplot(top_fighters, aes(x = reorder(Name, -Wins), y = Wins)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  geom_image(aes(image = Image), size = 0.2, by = "width", nudge_y = 5) +  
+  labs(title = "Top 10 Fighters by Wins",
+       x = "Fighter",
+       y = "Wins") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, max(top_fighters$Wins) + 5)
+```
+
+### Top Gyms
+
+```{r}
+top_gyms <- fighter_summary %>%
+  group_by(Team) %>%
+  summarise(Total_Fighters = n()) %>%
+  arrange(desc(Total_Fighters))
+
+top_gyms <- na.omit(top_gyms)
+top_gyms <- head(top_gyms, n = 10)
+
+
+ggplot(top_gyms, aes(x = reorder(Team, -Total_Fighters), y = Total_Fighters, fill = Team)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Gyms with Most Fighters",
+       x = "Gyms",
+       y = "Total Fighters") +
+   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Spectral")
+```
+
+
+
+```{r}
+library(shiny)
+library(tidyverse)
+library(readr)
+library(shinyWidgets)
+library(shinydashboard)
+library(plotly)
+library(DT)
+
+
+
+data <- read_csv("fighter_summary_final.csv")
+
+
+top_gyms <- data %>%
+  group_by(Team) %>%
+  summarise(Total_Fighters = n()) %>%
+  arrange(desc(Total_Fighters)) %>%
+  na.omit() %>%
+  head(n = 9)
+
+top_28_gyms <- data %>%
+  group_by(Team) %>%
+  summarise(Total_Fighters = n()) %>%
+  arrange(desc(Total_Fighters)) %>%
+  filter(Total_Fighters >= 4) %>%
+  pull(Team)
+
+
+ui <- dashboardPage(
+  skin = "red",
+  
+  dashboardHeader(title = "Muay Thai Athletes"),
+  
+  dashboardSidebar(
+    HTML("<p><strong>Dashboard Overview:</strong><br>
+          This dashboard explores the top fighters by total wins, country, and weight class, as well as the gyms that represent the most fighters in ONE Championship. 
+          Fighters can be filtered by weight class and country, showcasing the top athletes for each. The charts dynamically update based on these selections.</p>"),
+    
+    pickerInput(
+      inputId = "picker_country", 
+      label = h4("Select Country"), 
+      choices = unique(data$Country),
+      selected = unique(data$Country),
+      multiple = FALSE, 
+      options = list(
+        `actions-box` = TRUE, 
+        size = 10, 
+        `selected-text-format` = "count > 3"
+      )
+    ),
+    
+    pickerInput(
+      inputId = "picker_weightclass", 
+      label = h4("Select Weight Class"), 
+      choices = unique(data$Weight_Class),
+      selected = unique(data$Weight_Class),
+      multiple = FALSE, 
+      options = list(
+        `actions-box` = TRUE, 
+        size = 10, 
+        `selected-text-format` = "count > 3"
+      )
+    ),
+    
+    pickerInput(
+      inputId = "picker_gym", 
+      label = h4("Select a Gym"), 
+      choices = top_28_gyms,
+      selected = top_28_gyms[1],
+      multiple = FALSE,
+      options = list(`actions-box` = TRUE)
+    ),
+    
+    pickerInput(
+      inputId = "picker_win",
+      label = h4("Select Win Type"),
+      choices = c("Knockouts/KO" = "Knockouts_TKOs", "Decisions" = "Decisions"),
+      selected = "Knockouts_TKOs",
+      multiple = FALSE, 
+      options = list(`actions-box` = TRUE)
+    ),
+    
+    actionButton(
+      inputId = "reset",                        
+      label = "Reset", 
+      icon = icon("sync")
+    )
+  ),
+  
+  dashboardBody(
+    tags$head(
+      tags$style(HTML("
+                      .content-wrapper {
+                      max-width: 1200px;
+                      margin: auto;
+                      }"))
+    ),
+    
+    
+    fluidRow(
+      box(
+        plotlyOutput("graph_4", height= "400px"),
+        title = "Top Fighters by Win Type",
+        width = 6
+      ),
+      box(
+        plotOutput("graph_3", height = "400px"),
+        title = "Gyms with Most Fighters",
+        width = 6
+      ),
+      box(
+        plotlyOutput("graph_1", height = "400px"),
+        title = "Top Fighters by Country",
+        width = 6
+      ),
+      box(
+        plotlyOutput("graph_2", height = "400px"),
+        title = "Top Fighters by Weight Class",
+        width = 6
+      )
+    ),
+    
+    
+    fluidRow(
+      box(
+        DTOutput("fighter_table"),
+        title = "Fighters by Gym",
+        width = 12,
+        height = "400px"
+      )
+    )
+  )
+)
+
+
+
+server <- function(input, output, session) {
+  
+  filtered_win <- reactive({
+    selected_column <- input$picker_win
+    data %>%
+      filter(!!sym(selected_column) > 0) %>%
+      arrange(desc(!!sym(selected_column)))
+  })
+  
+  output$graph_4 <- renderPlotly({
+    filtered_win() %>%
+      head(10) %>%
+      ggplot(aes(x = reorder(Name, -get(input$picker_win)), y = get(input$picker_win), fill = Name)) +
+      geom_bar(stat = "identity") +
+      labs(
+        title = paste("Top Fighters by", ifelse(input$picker_win == "Knockouts_TKOs", "Knockouts/KO", "Decisions")),
+        x = "Fighter",
+        y = "Wins"
+      ) +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      scale_fill_manual(values = c("#FF0000", "#FF1A1A", "#FF3333", "#FF4D4D", 
+                                   "#FF6666", "#FF8080", "#FF9999", "#FFB3B3", 
+                                   "#FFCCCC", "#FFE6E6"))
+  })
+  
+  
+  output$graph_3 <- renderPlot({
+    ggplot(top_gyms, aes(x = reorder(Team, -Total_Fighters), y = Total_Fighters, fill = Team)) +
+      geom_bar(stat = "identity") +
+      labs(title = "Gyms with Most Fighters",
+           x = "Gyms",
+           y = "Total Fighters") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      scale_fill_manual(values = c("#FF0000", "#FF1A1A", "#FF3333", "#FF4D4D", 
+                                   "#FF6666", "#FF8080", "#FF9999", "#FFB3B3", 
+                                   "#FFCCCC", "#FFE6E6"))
+  })
+  
+  
+  filtered_fighters_by_country <- reactive({
+    data %>%
+      filter(Country %in% input$picker_country) %>%
+      arrange(desc(Wins))
+  })
+  
+  
+  output$graph_1 <- renderPlotly({
+    filtered_fighters_by_country() %>%
+      head(10) %>%
+      ggplot(aes(x = reorder(Name, -Wins), y = Wins, fill = Country)) +
+      geom_bar(stat = "identity") +
+      labs(title = "Top Fighters by Country",
+           x = "Fighter",
+           y = "Wins") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  
+  filtered_fighters_by_weightclass <- reactive({
+    data %>%
+      filter(Weight_Class %in% input$picker_weightclass) %>%
+      arrange(desc(Wins))
+  })
+  
+  
+  output$graph_2 <- renderPlotly({
+    filtered_fighters_by_weightclass() %>%
+      head(10) %>%
+      ggplot(aes(x = reorder(Name, -Wins), y = Wins, fill = Weight_Class)) +
+      geom_bar(stat = "identity") +
+      labs(title = "Top Fighters by Weight Class",
+           x = "Fighter",
+           y = "Wins") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  
+  output$fighter_table <- renderDT({
+    req(input$picker_gym)
+    selected_gym_fighters <- data %>% filter(Team == input$picker_gym)
+    datatable(selected_gym_fighters, options = list(pageLength = 10, scrollX = TRUE))
+  })
+  
+  
+  observeEvent(input$reset, {
+    updatePickerInput(session, inputId = "picker_country", selected = unique(data$Country))
+    updatePickerInput(session, inputId = "picker_weightclass", selected = unique(data$Weight_Class))
+    updatePickerInput(session, inputId = "picker_gym", selected = top_28_gyms[1])
+    updatePickerInput(session, inputId = "picker_win", selected = "Knockouts_TKOs")
+  })
+}
+
+
+shinyApp(ui, server)
+
+```
