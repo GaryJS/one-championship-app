@@ -19,6 +19,7 @@ https://gary-sanangelo.shinyapps.io/Assignment_4/
 10. [Tech Stack](#tech-stack)  
 11. [How to Run Locally](#how-to-run-locally)  
 12. [License](#license)
+13. [Key Findings & Insights](#KeyFindngs)
 
 ---
 
@@ -186,5 +187,145 @@ This section explains the design decisions behind the dashboard:
 - **Deployment Notes**  
   Deployed to shinyapps.io using `rsconnect::deployApp()`  
   Free tier → app sleeps after inactivity but wakes automatically.
+
+---
+
+## Supporting Functions & Code  
+
+Below are the core functional components that power the scraping process and dashboard logic.
+
+### **Scraping Logic**
+The scraping script uses:
+
+- **rvest** for HTML extraction  
+- **CSS selectors** to extract profile fields:
+  ```r
+  html_node(".my-4.attributes .attr:contains('Weight Limit') .value")
+  html_node(".simple-table.is-flat.is-mobile-row-popup tr.is-data-row")
+  ```
+- **Pagination loops** to scrape matchup history:
+  ```r
+  while (has_more) {
+      page_url <- paste0(full_url, "matchups/page/", page_num, "/")
+      ...
+      page_num <- page_num + 1
+  }
+  ```
+- **Error handling** using `tryCatch()`:
+  ```r
+  tryCatch({
+      athlete_page <- read_html(full_url)
+  }, error = function(e) NA)
+  ```
+- **Rate limiting** with:
+  ```r
+  Sys.sleep(2)
+  ```
+
+### **Dashboard Code (`assignment3.Rmd`)**
+This file contains everything needed for the dashboard:
+
+- Reactive filters (country, weight class, gym, win type)  
+- ggplot2 charts for KO/TKO vs Decision, country distribution, and gym counts  
+- Reset button with `observeEvent()`  
+- `dplyr` pipelines for summarization  
+- Flexdashboard layout  
+
+---
+
+## Tech Stack  
+
+### **Languages**
+- R  
+
+### **Libraries**
+- `shiny`  
+- `flexdashboard`  
+- `tidyverse`  
+- `dplyr`  
+- `ggplot2`  
+- `rvest`  
+- `shinyWidgets`  
+- `rsconnect`
+
+### **Tools**
+- RStudio  
+- GitHub  
+- shinyapps.io  
+
+**Workflow:** Scraping → Cleaning → EDA → Dashboard → Deployment
+
+---
+
+## How to Run Locally  
+
+### Clone the repository
+```bash
+git clone https://github.com/GaryJS/one-championship-app.git
+```
+
+### Open the project in RStudio
+
+### Install required packages
+```r
+install.packages(c(
+  "shiny", "flexdashboard", "tidyverse",
+  "dplyr", "ggplot2", "shinyWidgets", "rvest"
+))
+```
+
+### Run the dashboard
+```r
+rmarkdown::run("assignment3.Rmd")
+```
+
+### View the app  
+Your browser will open automatically.
+
+---
+
+## License  
+This project is provided for educational, academic, and portfolio purposes.  
+You may reuse components with attribution.
+
+---
+
+## Key Findings & Insights  
+
+### **Global Representation**
+ONE Championship Muay Thai fighters come from a highly diverse set of countries — especially Thailand, Brazil, USA, UK, and Japan.  
+This demonstrates the global reach and international recruitment of ONE Championship.
+
+### **KO/TKO vs Decision Trends**
+Different fighters and gyms reveal distinct stylistic patterns:
+- KO-heavy gyms emphasize aggressive striking
+- Decision-oriented fighters show more technical and endurance-based styles
+
+These patterns help identify tactical tendencies across regions.
+
+### **Gym Strength & Production**
+Top gyms — such as Fairtex, PK Saenchai, and Tiger Muay Thai — consistently produce:
+- High numbers of elite-level fighters  
+- Strong overall records  
+- Higher KO/TKO rates  
+
+The dashboard clearly visualizes gym-to-gym differences.
+
+### **Weight Class Characteristics**
+Different weight classes show variations in:
+- Total fights  
+- KO percentage  
+- International diversity  
+
+This helps identify which divisions attract more competitive or explosive fighters.
+
+### **Real-World Data Complexity**
+Scraping required solving several messy data issues:
+- Multi-page crawling  
+- Inconsistent HTML layout  
+- Missing values  
+- tryCatch-based error recovery  
+- Combining irregular scraped data into one unified file  
+
 
 ---
